@@ -25,21 +25,30 @@ enum DownloadStatus {
 class GetRawData extends AsyncTask<String, Void, String> {
     private static final String TAG = "GetRawData";
     private DownloadStatus mDownloadStatus;
-    private final MainActivity mCallback;
+    private final OnDownloadComplete mCallback;
 
     interface OnDownloadComplete {
         void onDownloadComplete(String data, DownloadStatus status);
     }
 
-    public GetRawData(MainActivity mCallback) {
+    public GetRawData(OnDownloadComplete mCallback) {
         this.mDownloadStatus = DownloadStatus.IDLE;
         this.mCallback = mCallback;
     }
 
+    void runInSameThread(String s) {
+        Log.d(TAG, "runInSameThread starts");
+        if(mCallback != null) {
+            mCallback.onDownloadComplete(doInBackground(s), mDownloadStatus);
+        }
+
+        onPostExecute(doInBackground(s));
+        Log.d(TAG, "runInSameThread ends");
+    }
 
     @Override
     protected void onPostExecute(String s) {
-        Log.d(TAG, "onPostExecute: parameter = " + s);
+//        Log.d(TAG, "onPostExecute: parameter = " + s);
         if(mCallback != null) {
             mCallback.onDownloadComplete(s, mDownloadStatus);
         }
@@ -56,7 +65,6 @@ class GetRawData extends AsyncTask<String, Void, String> {
             mDownloadStatus = DownloadStatus.NOT_INITIALISED;
             return null;
         }
-
 
         try {
             mDownloadStatus = DownloadStatus.PROCESSING;
@@ -105,4 +113,3 @@ class GetRawData extends AsyncTask<String, Void, String> {
         return null;
     }
 }
-

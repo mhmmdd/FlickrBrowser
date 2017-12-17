@@ -1,6 +1,7 @@
 package com.example.mhmmdd.flickrbrowser;
 
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -14,7 +15,7 @@ import java.util.List;
  * Created by muhammed on 4.12.2017.
  */
 
-class GetFlickrJsonData implements GetRawData.OnDownloadComplete {
+class GetFlickrJsonData extends AsyncTask<String, Void, List<Photo>> implements GetRawData.OnDownloadComplete {
     private static final String TAG = "GetFlickrJsonData";
 
     private List<Photo> photoList;
@@ -23,29 +24,53 @@ class GetFlickrJsonData implements GetRawData.OnDownloadComplete {
     private boolean matchAll;
 
     private final OnDataAvailable callback;
+    private boolean runningOnSameTherad = false;
+
+    public GetFlickrJsonData(OnDataAvailable callBack, String baseURL, String language, boolean matchAll) {
+        Log.d(TAG, "GetFlickrJsonData: called");
+        this.callback = callBack;
+        this.baseURL = baseURL;
+        this.language = language;
+        this.matchAll = matchAll;
+    }
 
     interface OnDataAvailable {
         void onDataAvailable(List<Photo> data, DownloadStatus status);
     }
 
-    public GetFlickrJsonData(List<Photo> photoList, String language, boolean matchAll, OnDataAvailable callback) {
-        this.photoList = photoList;
-        this.language = language;
-        this.matchAll = matchAll;
-        this.callback = callback;
+    @Override
+    protected void onPostExecute(List<Photo> photos) {
+        Log.d(TAG, "onPostExecute starts");
+
+        if(callback != null) {
+            callback.onDataAvailable(photoList, DownloadStatus.OK);
+        }
+        Log.d(TAG, "onPostExecute ends");
+    }
+
+    @Override
+    protected List<Photo> doInBackground(String... strings) {
+        Log.d(TAG, "doInBackground starts");
+        String destinationUri = createUri(strings[0], language, matchAll);
+
+        GetRawData getRawData = new GetRawData(this);
+        getRawData.runInSameThread(destinationUri);
+        Log.d(TAG, "doInBackground ends");
+        return photoList;
     }
 
     void executeOnSomeThread(String searchCriteria) {
         Log.d(TAG, "executeOnSomeThread: starts");
-        String destinationURL = createURL(searchCriteria, language, matchAll);
+        runningOnSameTherad = true;
+        String destinationURL = createUri(searchCriteria, language, matchAll);
 
         GetRawData getRawData = new GetRawData(this);
         getRawData.execute(destinationURL);
         Log.d(TAG, "executeOnSomeThread: ends");
     }
 
-    private String createURL(String searchCriteria, String language, boolean matchAll) {
-        Log.d(TAG, "createURL: starts");
+    private String createUri(String searchCriteria, String language, boolean matchAll) {
+        Log.d(TAG, "createUri starts");
 
         return Uri.parse(baseURL).buildUpon()
                 .appendQueryParameter("tags", searchCriteria)
@@ -66,7 +91,7 @@ class GetFlickrJsonData implements GetRawData.OnDownloadComplete {
         }
 
         try {
-            JSONObject jsonObject = new JSONObject(data);
+                JSONObject jsonObject = new JSONObject(data);
             JSONArray itemsArray = jsonObject.getJSONArray("items");
 
             for(int i = 0; i < itemsArray.length(); i++) {
@@ -80,9 +105,22 @@ class GetFlickrJsonData implements GetRawData.OnDownloadComplete {
                 String photoURL = jsonMedia.getString("m");
 
                 String link = photoURL.replaceFirst("_m.", "_b.");
+
+                Photo photo = new Photo(title, author, authorId, link, tags, photoURL);
+                photoList.add(photo);
+
+                Log.d(TAG, "onDownloadComplete: " + photo.toString());
             }
         } catch (JSONException e) {
             e.printStackTrace();
+            Log.e(TAG, "onDownloadComplete: Error processing JSON data " + e.getMessage());
+            status = DownloadStatus.FAILED_OR_EMPTY;
         }
+
+        if (runningOnSameTherad && callback != null) {
+            callback.onDataAvailable(photoList, status);
+        }
+	    Log.d(TAG, "onDownloadComplete: ends");
     }
+
 }
